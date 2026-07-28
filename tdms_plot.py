@@ -397,10 +397,14 @@ WEB_APP_HTML = """<!DOCTYPE html>
     #plot { width: 100%; height: 500px; border: 1px solid #ddd; }
     #status { white-space: pre-wrap; font-size: 13px; color: #333; }
     button { padding: 6px 12px; }
+    details { border: 1px solid #ccc; padding: 6px 10px; margin-bottom: 10px; border-radius: 4px; background: #fafafa; }
+    details summary { cursor: pointer; font-weight: bold; user-select: none; }
   </style>
 </head>
 <body>
   <h2>TDMS local web app</h2>
+
+  <!-- Trace 1 -->
   <div class="row">
     <label for="basePath">Base path</label>
     <input id="basePath" placeholder="Relative or absolute folder path" />
@@ -420,9 +424,49 @@ WEB_APP_HTML = """<!DOCTYPE html>
   </div>
   <div class="row">
     <label><input type="checkbox" id="average" /> Average</label>
-    <label>Window <input id="averageWindow" type="number" value="5" min="3" step="1" style="min-width: 80px;" /></label>
+    <label style="min-width:auto;">Window <input id="averageWindow" type="number" value="5" min="3" step="1" style="min-width: 80px;" /></label>
+  </div>
+  <div class="row">
     <label><input type="checkbox" id="integrate" /> Integrate</label>
     <label><input type="checkbox" id="subtractAverage" /> Subtract average</label>
+  </div>
+
+  <!-- Compare: multi-trace — overlay or separate subplots -->
+  <details id="compareSection">
+    <summary>Compare: multi-trace (overlay or separate subplots)</summary>
+    <div class="row">
+      <label for="basePath2">Base path 2</label>
+      <input id="basePath2" placeholder="Relative or absolute folder path" />
+      <button id="refreshFiles2">Refresh files</button>
+    </div>
+    <div class="row">
+      <label for="tdmsFile2">TDMS file 2</label>
+      <select id="tdmsFile2"></select>
+    </div>
+    <div class="row">
+      <label for="group2">Group 2</label>
+      <select id="group2"></select>
+      <label for="xChannel2">X channel 2</label>
+      <select id="xChannel2"></select>
+      <label for="yChannel2">Y channel 2</label>
+      <select id="yChannel2"></select>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="average2" /> Average</label>
+      <label style="min-width:auto;">Window <input id="averageWindow2" type="number" value="5" min="3" step="1" style="min-width: 80px;" /></label>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="integrate2" /> Integrate</label>
+      <label><input type="checkbox" id="subtractAverage2" /> Subtract average</label>
+    </div>
+    <div class="row">
+      <span style="min-width:110px;">Plot mode:</span>
+      <label style="min-width:auto;"><input type="radio" name="plotMode" value="overlay" checked /> Overlay (one plot)</label>
+      <label style="min-width:auto;"><input type="radio" name="plotMode" value="subplots" /> Separate subplots</label>
+    </div>
+  </details>
+
+  <div class="row">
     <button id="plotBtn">Plot</button>
   </div>
   <div id="plot"></div>
@@ -433,17 +477,23 @@ WEB_APP_HTML = """<!DOCTYPE html>
     const group = document.getElementById('group');
     const xChannel = document.getElementById('xChannel');
     const yChannel = document.getElementById('yChannel');
+    const tdmsFile2 = document.getElementById('tdmsFile2');
+    const group2 = document.getElementById('group2');
+    const xChannel2 = document.getElementById('xChannel2');
+    const yChannel2 = document.getElementById('yChannel2');
     const status = document.getElementById('status');
 
     let channelsByGroup = {};
+    let channelsByGroup2 = {};
 
     function setStatus(text) { status.textContent = text; }
-    function qs() { return new URLSearchParams({ base_path: document.getElementById('basePath').value }); }
+    function qs(basePath) { return new URLSearchParams({ base_path: basePath || '' }); }
 
+    // --- Trace 1 ---
     async function refreshFiles() {
       try {
         setStatus('Loading file list...');
-        const response = await fetch('/api/files?' + qs().toString());
+        const response = await fetch('/api/files?' + qs(document.getElementById('basePath').value).toString());
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || 'Failed to load files');
         tdmsFile.innerHTML = '';
@@ -460,6 +510,8 @@ WEB_APP_HTML = """<!DOCTYPE html>
     }
 
     function fillChannels() {
+      const prevX = xChannel.value;
+      const prevY = yChannel.value;
       const selectedGroup = group.value;
       const channels = channelsByGroup[selectedGroup] || [];
       xChannel.innerHTML = '';
@@ -472,25 +524,32 @@ WEB_APP_HTML = """<!DOCTYPE html>
 
       channels.forEach(channelName => {
         const xOpt = document.createElement('option');
-        xOpt.value = channelName;
-        xOpt.textContent = channelName;
+        xOpt.value = channelName; xOpt.textContent = channelName;
         xChannel.appendChild(xOpt);
 
         const yOpt = document.createElement('option');
-        yOpt.value = channelName;
-        yOpt.textContent = channelName;
+        yOpt.value = channelName; yOpt.textContent = channelName;
         yChannel.appendChild(yOpt);
       });
 
-      xChannel.value = 'Time';
-      if (channels.length) yChannel.value = channels[0];
+      // Preserve previous selection when the channel still exists
+      if (prevX && [...xChannel.options].some(o => o.value === prevX)) {
+        xChannel.value = prevX;
+      } else {
+        xChannel.value = 'Time';
+      }
+      if (prevY && [...yChannel.options].some(o => o.value === prevY)) {
+        yChannel.value = prevY;
+      } else if (channels.length) {
+        yChannel.value = channels[0];
+      }
     }
 
     async function refreshMetadata() {
       try {
         if (!tdmsFile.value) return;
         setStatus('Loading metadata...');
-        const params = qs();
+        const params = qs(document.getElementById('basePath').value);
         params.set('file', tdmsFile.value);
         const response = await fetch('/api/metadata?' + params.toString());
         const payload = await response.json();
@@ -509,38 +568,173 @@ WEB_APP_HTML = """<!DOCTYPE html>
       }
     }
 
+    // --- Trace 2 ---
+    async function refreshFiles2() {
+      try {
+        setStatus('Loading file list (trace 2)...');
+        const response = await fetch('/api/files?' + qs(document.getElementById('basePath2').value).toString());
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Failed to load files (trace 2)');
+        tdmsFile2.innerHTML = '';
+        payload.files.forEach(file => {
+          const opt = document.createElement('option');
+          opt.value = file; opt.textContent = file;
+          tdmsFile2.appendChild(opt);
+        });
+        setStatus(payload.files.length ? `Trace 2: found ${payload.files.length} file(s)` : 'Trace 2: no TDMS files found');
+        if (payload.files.length) await refreshMetadata2();
+      } catch (err) {
+        setStatus(err.message);
+      }
+    }
+
+    function fillChannels2() {
+      const prevX = xChannel2.value;
+      const prevY = yChannel2.value;
+      const selectedGroup = group2.value;
+      const channels = channelsByGroup2[selectedGroup] || [];
+      xChannel2.innerHTML = '';
+      yChannel2.innerHTML = '';
+
+      const timeOption = document.createElement('option');
+      timeOption.value = 'Time';
+      timeOption.textContent = 'Time';
+      xChannel2.appendChild(timeOption);
+
+      channels.forEach(channelName => {
+        const xOpt = document.createElement('option');
+        xOpt.value = channelName; xOpt.textContent = channelName;
+        xChannel2.appendChild(xOpt);
+
+        const yOpt = document.createElement('option');
+        yOpt.value = channelName; yOpt.textContent = channelName;
+        yChannel2.appendChild(yOpt);
+      });
+
+      if (prevX && [...xChannel2.options].some(o => o.value === prevX)) {
+        xChannel2.value = prevX;
+      } else {
+        xChannel2.value = 'Time';
+      }
+      if (prevY && [...yChannel2.options].some(o => o.value === prevY)) {
+        yChannel2.value = prevY;
+      } else if (channels.length) {
+        yChannel2.value = channels[0];
+      }
+    }
+
+    async function refreshMetadata2() {
+      try {
+        if (!tdmsFile2.value) return;
+        setStatus('Loading metadata (trace 2)...');
+        const params = qs(document.getElementById('basePath2').value);
+        params.set('file', tdmsFile2.value);
+        const response = await fetch('/api/metadata?' + params.toString());
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'Failed to load metadata (trace 2)');
+        channelsByGroup2 = payload.channels_by_group || {};
+        group2.innerHTML = '';
+        payload.groups.forEach(groupName => {
+          const opt = document.createElement('option');
+          opt.value = groupName; opt.textContent = groupName;
+          group2.appendChild(opt);
+        });
+        fillChannels2();
+        setStatus(`Loaded metadata (trace 2) for ${tdmsFile2.value}`);
+      } catch (err) {
+        setStatus(err.message);
+      }
+    }
+
     async function plotData() {
       try {
         if (!tdmsFile.value || !group.value || !yChannel.value) {
           throw new Error('Choose file, group and Y channel first');
         }
         setStatus('Building plot...');
-        const params = qs();
-        params.set('file', tdmsFile.value);
-        params.set('group', group.value);
-        params.set('x_channel', xChannel.value);
-        params.set('y_channel', yChannel.value);
-        params.set('average', document.getElementById('average').checked);
-        params.set('average_window', document.getElementById('averageWindow').value || '5');
-        params.set('integrate', document.getElementById('integrate').checked);
-        params.set('subtract_average', document.getElementById('subtractAverage').checked);
-        const response = await fetch('/api/plot?' + params.toString());
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || 'Failed to build plot');
-        Plotly.newPlot('plot', [{ x: payload.x, y: payload.y, mode: 'lines', type: 'scatter' }], {
-          margin: { l: 40, r: 20, t: 30, b: 40 },
-          xaxis: { title: payload.x_channel },
-          yaxis: { title: payload.y_channel }
-        });
-        setStatus(`Plotted ${payload.file} / ${payload.group}`);
+
+        const p1 = await fetchTrace(
+          document.getElementById('basePath').value,
+          tdmsFile.value, group.value, xChannel.value, yChannel.value,
+          document.getElementById('average').checked,
+          document.getElementById('averageWindow').value,
+          document.getElementById('integrate').checked,
+          document.getElementById('subtractAverage').checked
+        );
+
+        const compareOpen = document.getElementById('compareSection').open;
+        const plotMode = document.querySelector('input[name="plotMode"]:checked').value;
+
+        if (compareOpen && tdmsFile2.value && group2.value && yChannel2.value) {
+          const p2 = await fetchTrace(
+            document.getElementById('basePath2').value,
+            tdmsFile2.value, group2.value, xChannel2.value, yChannel2.value,
+            document.getElementById('average2').checked,
+            document.getElementById('averageWindow2').value,
+            document.getElementById('integrate2').checked,
+            document.getElementById('subtractAverage2').checked
+          );
+
+          const trace1 = { x: p1.x, y: p1.y, mode: 'lines', type: 'scatter',
+                           name: `${p1.file} / ${p1.y_channel}` };
+          const trace2 = { x: p2.x, y: p2.y, mode: 'lines', type: 'scatter',
+                           name: `${p2.file} / ${p2.y_channel}` };
+
+          if (plotMode === 'subplots') {
+            trace2.xaxis = 'x2';
+            trace2.yaxis = 'y2';
+            Plotly.newPlot('plot', [trace1, trace2], {
+              grid: { rows: 2, columns: 1, pattern: 'independent' },
+              margin: { l: 50, r: 20, t: 30, b: 40 },
+              xaxis:  { title: p1.x_channel },
+              yaxis:  { title: p1.y_channel },
+              xaxis2: { title: p2.x_channel },
+              yaxis2: { title: p2.y_channel },
+              height: 700
+            });
+          } else {
+            Plotly.newPlot('plot', [trace1, trace2], {
+              margin: { l: 50, r: 20, t: 30, b: 40 },
+              xaxis: { title: p1.x_channel },
+              yaxis: { title: p1.y_channel }
+            });
+          }
+          setStatus(`Plotted trace 1: ${p1.file}/${p1.group} | trace 2: ${p2.file}/${p2.group}`);
+        } else {
+          Plotly.newPlot('plot', [{ x: p1.x, y: p1.y, mode: 'lines', type: 'scatter' }], {
+            margin: { l: 40, r: 20, t: 30, b: 40 },
+            xaxis: { title: p1.x_channel },
+            yaxis: { title: p1.y_channel }
+          });
+          setStatus(`Plotted ${p1.file} / ${p1.group}`);
+        }
       } catch (err) {
         setStatus(err.message);
       }
     }
 
+    async function fetchTrace(basePath, file, grp, xCh, yCh, avg, avgWin, integ, subAvg) {
+      const params = qs(basePath);
+      params.set('file', file);
+      params.set('group', grp);
+      params.set('x_channel', xCh);
+      params.set('y_channel', yCh);
+      params.set('average', avg);
+      params.set('average_window', avgWin || '5');
+      params.set('integrate', integ);
+      params.set('subtract_average', subAvg);
+      const response = await fetch('/api/plot?' + params.toString());
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Failed to build plot');
+      return payload;
+    }
+
     document.getElementById('refreshFiles').addEventListener('click', refreshFiles);
+    document.getElementById('refreshFiles2').addEventListener('click', refreshFiles2);
     tdmsFile.addEventListener('change', refreshMetadata);
+    tdmsFile2.addEventListener('change', refreshMetadata2);
     group.addEventListener('change', fillChannels);
+    group2.addEventListener('change', fillChannels2);
     document.getElementById('plotBtn').addEventListener('click', plotData);
     refreshFiles();
   </script>
@@ -636,9 +830,14 @@ def run_local_web_app(host='127.0.0.1', port=8000):
 
 
 if __name__ == "__main__":
-    print('''This is a module containing widgets for working with TDMS files.
-          Run tdms_plot.main_widget() to start widget.
-          Run tdms_plot.run_local_web_app() to start local web app.''')
+    import argparse
+    parser = argparse.ArgumentParser(description='TDMS local web viewer')
+    parser.add_argument('--host', default='127.0.0.1',
+                        help='Host to bind to (default: 127.0.0.1)')
+    parser.add_argument('--port', type=int, default=8000,
+                        help='Port to listen on (default: 8000)')
+    args = parser.parse_args()
+    run_local_web_app(host=args.host, port=args.port)
 
 
 # TODO
