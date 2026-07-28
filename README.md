@@ -35,3 +35,18 @@ conda install numpy ipython matplotlib jupyterlab ipywidgets plotly nptdms scipy
 import tdms_plot
 tdms_plot.main_widget()
 ```
+
+## Локальное web-приложение
+
+Также доступен локально хостируемый web-интерфейс для чтения и построения графиков по TDMS файлам.
+
+Запуск:
+
+```python
+import tdms_plot
+tdms_plot.run_local_web_app(host='127.0.0.1', port=8000)
+```
+
+После запуска откройте в браузере:
+
+`http://127.0.0.1:8000`
