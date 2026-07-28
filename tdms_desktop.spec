@@ -28,8 +28,6 @@ a = Analysis(
         # scipy sub-modules
         'scipy.signal',
         'scipy.integrate',
-        'scipy.special._ufuncs',
-        'scipy.special._ufuncs_cxx',
     ],
     hookspath=[],
     hooksconfig={},
