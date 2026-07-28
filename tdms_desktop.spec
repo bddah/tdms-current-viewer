@@ -1,21 +1,33 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_all
 
-
-datas = collect_data_files('pyqtgraph')
-
+datas_pg, binaries_pg, hiddenimports_pg = collect_all('pyqtgraph')
 
 a = Analysis(
     ['src/app.py'],
     pathex=['src'],
-    binaries=[],
-    datas=datas,
-    hiddenimports=[
+    binaries=binaries_pg,
+    datas=datas_pg,
+    hiddenimports=hiddenimports_pg + [
+        # pyqtgraph Qt backend -- imported dynamically so PyInstaller misses it
+        'pyqtgraph.Qt.PySide6',
+        'pyqtgraph.exporters',
+        # PySide6 optional modules used by pyqtgraph exporters / widgets
+        'PySide6.QtSvg',
+        'PySide6.QtPrintSupport',
+        'PySide6.QtOpenGL',
+        'PySide6.QtOpenGLWidgets',
+        # nptdms and its internal modules
         'nptdms',
+        'nptdms.tdms',
+        'nptdms.tdms_file',
+        'nptdms.read_file',
+        'nptdms.common',
+        'nptdms.types',
+        'nptdms.export',
+        # scipy sub-modules
         'scipy.signal',
         'scipy.integrate',
-        'pyqtgraph',
-        'pyqtgraph.exporters',
     ],
     hookspath=[],
     hooksconfig={},
@@ -42,7 +54,6 @@ exe = EXE(
 coll = COLLECT(
     exe,
     a.binaries,
-    a.zipfiles,
     a.datas,
     strip=False,
     upx=True,
