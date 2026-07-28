@@ -2,13 +2,15 @@
 from PyInstaller.utils.hooks import collect_all
 
 datas_pg, binaries_pg, hiddenimports_pg = collect_all('pyqtgraph')
+datas_scipy, binaries_scipy, hiddenimports_scipy = collect_all('scipy')
+datas_nptdms, binaries_nptdms, hiddenimports_nptdms = collect_all('nptdms')
 
 a = Analysis(
     ['src/app.py'],
     pathex=['src'],
-    binaries=binaries_pg,
-    datas=datas_pg,
-    hiddenimports=hiddenimports_pg + [
+    binaries=binaries_pg + binaries_scipy + binaries_nptdms,
+    datas=datas_pg + datas_scipy + datas_nptdms,
+    hiddenimports=hiddenimports_pg + hiddenimports_scipy + hiddenimports_nptdms + [
         # pyqtgraph Qt backend -- imported dynamically so PyInstaller misses it
         'pyqtgraph.Qt.PySide6',
         'pyqtgraph.exporters',
@@ -17,17 +19,6 @@ a = Analysis(
         'PySide6.QtPrintSupport',
         'PySide6.QtOpenGL',
         'PySide6.QtOpenGLWidgets',
-        # nptdms and its internal modules
-        'nptdms',
-        'nptdms.tdms',
-        'nptdms.tdms_file',
-        'nptdms.read_file',
-        'nptdms.common',
-        'nptdms.types',
-        'nptdms.export',
-        # scipy sub-modules
-        'scipy.signal',
-        'scipy.integrate',
     ],
     hookspath=[],
     hooksconfig={},
