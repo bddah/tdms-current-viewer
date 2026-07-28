@@ -325,13 +325,15 @@ class main_widget(widgets.VBox):
 
 
 def _resolve_base_path(base_path):
-    if base_path:
-        root = Path(base_path)
-        if not root.is_absolute():
-            root = Path.cwd() / root
-    else:
-        root = Path.cwd()
-    return root.resolve()
+    root = Path.cwd().resolve()
+    if not base_path:
+        return root
+    candidate = (root / base_path).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise ValueError('Base path should be inside current directory') from exc
+    return candidate
 
 
 def _list_tdms_files(base_path):
@@ -351,8 +353,10 @@ def _resolve_tdms_file_path(base_path, file_name):
         raise ValueError('File name should not include directories')
     folder = _resolve_base_path(base_path)
     tdms_file_path = (folder / file_name).resolve()
-    if folder not in tdms_file_path.parents:
-        raise ValueError('Invalid file path')
+    try:
+        tdms_file_path.relative_to(folder)
+    except ValueError as exc:
+        raise ValueError('Invalid file path') from exc
     if not tdms_file_path.is_file():
         raise FileNotFoundError(f'File not found: {tdms_file_path}')
     return tdms_file_path
